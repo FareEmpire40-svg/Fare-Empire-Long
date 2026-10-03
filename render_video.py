@@ -14,13 +14,13 @@ chat_id = os.environ.get('CHAT_ID')
 telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
 
 # 👇 USA Channel Name 👇
-channel_name = "OceanicSecrets®" 
+channel_name = "Fare Empire" 
 
 print(f"DEBUG: Processing {len(scenes_data)} scenes async...")
 
 # --- SMART DYNAMIC FALLBACK KEYWORDS ---
-# GitHub Actions se jo bhi fallback theme aayegi, yeh usey list mein badal dega.
-fallback_env = os.environ.get('FALLBACK_KEYWORDS', 'dark ocean waves, underwater abstract, deep sea background, ocean floor, mysterious underwater')
+# Fare Empire ke liye logistical/mechanical visual keywords (No sunny beaches)
+fallback_env = os.environ.get('FALLBACK_KEYWORDS', 'airplane taking off, airport terminal blur, luggage conveyor belt, hotel lobby, credit card swipe')
 FALLBACK_KEYWORDS = [kw.strip() for kw in fallback_env.split(',')]
 
 TEMP_DIR = "/dev/shm" if os.path.exists("/dev/shm") else os.getcwd()
@@ -39,12 +39,10 @@ async def fetch_pexels_video(session, keyword):
             if pexels_rate_limit_hit: break
             try:
                 await asyncio.sleep(random.uniform(0.1, 0.5))
-                # Jab attempts badhein toh safe page=1 rakho taaki khali result na aaye
                 random_page = random.randint(1, 5) if attempt == 0 else 1 
                 url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(query)}&per_page=5&page={random_page}&orientation=landscape&size=large"
                 
                 async with session.get(url, headers={"Authorization": pexels_key}, timeout=10) as response:
-                    # [IMPROVED]: Added Rate Limit (429) Handling & Killswitch
                     if response.status == 429:
                         print("🚨 Pexels API Rate Limit (429) HIT! Aborting API to prevent black screens.")
                         pexels_rate_limit_hit = True
@@ -72,7 +70,6 @@ async def process_scene(session, i, scene):
     text_line = scene.get('text', '').strip()
     if not text_line: return None
     
-    # 👇 YAHAN .mp4 KI JAGAH .ts FORMAT KIYA GAYA HAI TIMESTAMPS FIX KARNE KE LIYE 👇
     scene_filename = os.path.join(TEMP_DIR, f"scene_{i}.ts")
     raw_mp3 = os.path.join(TEMP_DIR, f"raw_a_{i}.mp3")
     vid_path = os.path.join(TEMP_DIR, f"raw_vid_{i}.mp4")
@@ -113,23 +110,20 @@ async def process_scene(session, i, scene):
                     async with session.get(vid_url, timeout=15) as resp:
                         if resp.status == 200:
                             vid_bytes = await resp.read()
-                            # [IMPROVED]: Increased size threshold to 200KB to strictly avoid corrupt/small files
                             if len(vid_bytes) > 200000: 
                                 with open(vid_path, "wb") as f:
                                     f.write(vid_bytes)
-                                # 👇 MASTER RECYCLER BACKUP SAVE KIYA GAYA 👇
                                 with open(os.path.join(TEMP_DIR, "master_fallback.mp4"), "wb") as f:
                                     f.write(vid_bytes)
                                 is_valid_video = True
-                                break # Download successful, break loop
+                                break 
                             else:
                                 print(f"Video file too small ({len(vid_bytes)} bytes) on attempt {download_attempt+1}, discarding.")
                 except Exception as e:
                     print(f"Failed to download video for scene {i} on attempt {download_attempt+1}: {str(e)}")
                     
-            vid_url = None # Reset for fallback fetch
+            vid_url = None 
 
-        # 👇 IF PEXELS FAILS OR API HITS LIMIT, USE THE BACKUP INSTEAD OF BLACK SCREEN 👇
         if not is_valid_video:
             master_fallback = os.path.join(TEMP_DIR, "master_fallback.mp4")
             if os.path.exists(master_fallback):
@@ -145,13 +139,10 @@ async def process_scene(session, i, scene):
         if is_valid_video:
             cmd = ['ffmpeg', '-y', '-ignore_editlist', '1', '-stream_loop', '-1', '-fflags', '+genpts', '-i', vid_path, '-ss', '0.2', '-i', raw_mp3]
             if has_pop: cmd += ['-i', pop_path]
-            # Changed y=h-th-50 to y=50 in the drawtext filter below
             v_filter = f"[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1,format=yuv420p,fps=30,unsharp=5:5:0.5:5:5:0.0,eq=contrast=1.1:saturation=1.25,drawtext=text='{channel_name}':fontcolor=white@0.5:fontsize=48:x=w-tw-50:y=50,fade=t=in:st=0:d=0.5,fade=t=out:st={fade_out}:d=0.5[v]"
         else:
-            # Backup fail hone par aakhiri rasta (Rare case)
             cmd = ['ffmpeg', '-y', '-f', 'lavfi', '-i', f'color=c=#151525:s=1920x1080:d={dur}', '-ss', '0.2', '-i', raw_mp3]
             if has_pop: cmd += ['-i', pop_path]
-            # Changed y=h-th-50 to y=50 in the drawtext filter below
             v_filter = f"[0:v]drawtext=text='{channel_name}':fontcolor=white@0.5:fontsize=48:x=w-tw-50:y=50,fade=t=in:st=0:d=0.5,fade=t=out:st={fade_out}:d=0.5[v]"
 
         if has_pop:
@@ -167,7 +158,7 @@ async def process_scene(session, i, scene):
             '-map', '[v]', '-map', a_map,
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
             '-c:a', 'aac', '-b:a', '192k', '-pix_fmt', 'yuv420p',
-            '-bsf:v', 'h264_mp4toannexb', '-f', 'mpegts', # 👈 TS Muxing added for timestamps fix
+            '-bsf:v', 'h264_mp4toannexb', '-f', 'mpegts', 
             '-t', str(dur), scene_filename
         ]
             
@@ -204,7 +195,6 @@ async def main_pipeline():
         with open(vid_list_path, "w") as f:
             for r in results: f.write(f"file '{r['vid']}'\n")
 
-        # 👇 TS FORMAT USE KIYA GAYA HAI TAक्यूKI MP4 CONCATENATION BREAK NA HO 👇
         raw_video = os.path.join(TEMP_DIR, 'raw_video.ts')
         final_video = 'final_video.mp4' 
         
@@ -244,8 +234,8 @@ async def main_pipeline():
         run_id = os.environ.get('GITHUB_RUN_ID', str(int(time.time())))
         tag_name = f"vid-{run_id}"
         
-        # 👇 Repo name updated as per screenshot and workflow 👇
-        repo_name = os.environ.get('GITHUB_REPOSITORY', "ressomoda-cloud/Oceanic-Secrets-Long") 
+        # 👇 Repo name updated as per screenshot[cite: 3] 👇
+        repo_name = os.environ.get('GITHUB_REPOSITORY', "FareEmpire40-svg/Fare-Empire-Long") 
         
         try:
             cmd = ['gh', 'release', 'create', tag_name, final_video, '--repo', repo_name, '--notes', 'Automated Video Render']
