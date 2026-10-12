@@ -28,9 +28,10 @@ jobs:
           sudo apt-get install -y ffmpeg
 
       - name: Install Python Libraries
+        # 👇 Yahan --upgrade add kiya gaya hai taaki edge-tts hamesha update rahe 👇
         run: |
           python -m pip install --upgrade pip
-          pip install requests aiohttp edge-tts
+          pip install --upgrade requests aiohttp edge-tts
 
       - name: Run Video Rendering Script
         env:
