@@ -78,6 +78,9 @@ async def process_scene(session, i, scene):
         tts_success = False
         for attempt in range(3):
             try:
+                # 👇 API Block se bachne ke liye delay add kiya gaya hai 👇
+                await asyncio.sleep(random.uniform(3.0, 6.0))
+                
                 # 👇 USA English Voice for storytelling 👇
                 communicate = edge_tts.Communicate(text_line, "en-US-ChristopherNeural", rate="+10%")
                 await asyncio.wait_for(communicate.save(raw_mp3), timeout=15.0)
@@ -179,7 +182,8 @@ async def run_ffmpeg_async(cmd):
 
 async def main_pipeline():
     async with aiohttp.ClientSession() as session:
-        sem = asyncio.Semaphore(4)
+        # 👇 Concurrency ko 1 par set kiya gaya hai taaki API block na ho 👇
+        sem = asyncio.Semaphore(1)
         
         async def safe_process(session, i, scene):
             async with sem:
@@ -234,7 +238,7 @@ async def main_pipeline():
         run_id = os.environ.get('GITHUB_RUN_ID', str(int(time.time())))
         tag_name = f"vid-{run_id}"
         
-        # 👇 Repo name updated as per screenshot[cite: 3] 👇
+        # 👇 Repo name updated as per screenshot 👇
         repo_name = os.environ.get('GITHUB_REPOSITORY', "FareEmpire40-svg/Fare-Empire-Long") 
         
         try:
