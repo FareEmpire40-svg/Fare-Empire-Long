@@ -38,10 +38,8 @@ jobs:
           
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-          # 👇 Proxy Variables Added Here 👇
+          # 👇 Proxy Variable sirf audio ke liye rakha gaya hai 👇
           PROXY_URL: ${{ secrets.PROXY_URL }}
-          HTTP_PROXY: ${{ secrets.PROXY_URL }}
-          HTTPS_PROXY: ${{ secrets.PROXY_URL }}
           
           # Payload Data from n8n Webhook
           SCENES_DATA: ${{ github.event.client_payload.scenes_data }}
