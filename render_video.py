@@ -13,20 +13,19 @@ pexels_key = os.environ.get('PEXELS_API_KEY')
 chat_id = os.environ.get('CHAT_ID')
 telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
 
-# 👇 PROXY VARIABLE ADDED 👇
-proxy_url = os.environ.get('PROXY_URL')
-
 # 👇 USA Channel Name 👇
 channel_name = "Fare Empire®" 
 
 print(f"DEBUG: Processing {len(scenes_data)} scenes async...")
 
 # --- SMART DYNAMIC FALLBACK KEYWORDS ---
+# Fare Empire ke liye logistical/mechanical visual keywords (No sunny beaches)
 fallback_env = os.environ.get('FALLBACK_KEYWORDS', 'airplane taking off, airport terminal blur, luggage conveyor belt, hotel lobby, credit card swipe')
 FALLBACK_KEYWORDS = [kw.strip() for kw in fallback_env.split(',')]
 
 TEMP_DIR = "/dev/shm" if os.path.exists("/dev/shm") else os.getcwd()
 
+# 👇 NAYA FLAG: Pexels API block hone par track karne ke liye 👇
 pexels_rate_limit_hit = False
 
 async def fetch_pexels_video(session, keyword):
@@ -79,10 +78,8 @@ async def process_scene(session, i, scene):
         tts_success = False
         for attempt in range(3):
             try:
-                await asyncio.sleep(random.uniform(3.0, 6.0))
-                
-                # 👇 PROXY LINKED TO TTS CALL HERE 👇
-                communicate = edge_tts.Communicate(text_line, "en-US-ChristopherNeural", rate="+10%", proxy=proxy_url)
+                # 👇 USA English Voice for storytelling 👇
+                communicate = edge_tts.Communicate(text_line, "en-US-ChristopherNeural", rate="+10%")
                 await asyncio.wait_for(communicate.save(raw_mp3), timeout=15.0)
                 tts_success = True
                 break
@@ -100,6 +97,7 @@ async def process_scene(session, i, scene):
         dur = max(1.0, raw_dur - 0.2) 
         fade_out = max(0, dur - 0.5)
         
+        # --- Visual Pipeline with Retries and 200KB Size Check ---
         is_valid_video = False
         vid_url = await fetch_pexels_video(session, keyword)
         
@@ -181,7 +179,7 @@ async def run_ffmpeg_async(cmd):
 
 async def main_pipeline():
     async with aiohttp.ClientSession() as session:
-        sem = asyncio.Semaphore(1)
+        sem = asyncio.Semaphore(4)
         
         async def safe_process(session, i, scene):
             async with sem:
@@ -200,6 +198,9 @@ async def main_pipeline():
         raw_video = os.path.join(TEMP_DIR, 'raw_video.ts')
         final_video = 'final_video.mp4' 
         
+        # ==========================================
+        # PHASE 2: FLAWLESS AUDIO MUXING WITH GENPTS
+        # ==========================================
         await run_ffmpeg_async(['ffmpeg', '-y', '-fflags', '+genpts', '-f', 'concat', '-safe', '0', '-i', vid_list_path, '-c', 'copy', '-async', '1', raw_video])
 
         bgm_path = os.path.abspath("bgm.mp3")
@@ -215,6 +216,7 @@ async def main_pipeline():
             remux_cmd = ['ffmpeg', '-y', '-fflags', '+genpts', '-i', raw_video, '-c', 'copy', final_video]
             await run_ffmpeg_async(remux_cmd)
 
+        # Cleanup
         if os.path.exists(vid_list_path): os.remove(vid_list_path)
         if os.path.exists(raw_video): os.remove(raw_video)
         master_fallback = os.path.join(TEMP_DIR, "master_fallback.mp4")
@@ -223,12 +225,16 @@ async def main_pipeline():
             if os.path.exists(r['vid']): os.remove(r['vid'])
             if os.path.exists(r['aud']): os.remove(r['aud'])
 
+        # ==========================================
+        # PHASE 3: GITHUB RELEASES
+        # ==========================================
         video_link = None
         print("\n🚀 Uploading Video directly to GitHub Releases...")
         
         run_id = os.environ.get('GITHUB_RUN_ID', str(int(time.time())))
         tag_name = f"vid-{run_id}"
         
+        # 👇 Repo name updated as per screenshot[cite: 3] 👇
         repo_name = os.environ.get('GITHUB_REPOSITORY', "FareEmpire40-svg/Fare-Empire-Long") 
         
         try:
@@ -249,6 +255,9 @@ async def main_pipeline():
         except Exception as e:
             print(f"⚠️ Exception during GitHub upload: {str(e)}")
 
+        # ==========================================
+        # PHASE 4: TELEGRAM NOTIFICATION
+        # ==========================================
         if telegram_token:
             if video_link:
                 payload = {"chat_id": chat_id, "text": f"READY_TO_UPLOAD|{video_link}|{title.replace('|', '')}|{thumbnail_prompt.replace('|', '')}|{description.replace('|', '')}"}
